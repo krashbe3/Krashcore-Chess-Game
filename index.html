@@ -12,7 +12,7 @@
     body {
       background-color: #121212;
       color: #ffffff;
-      font-family: "Courier New", Courier, monospace;
+      font-family: 'Courier New', Courier, monospace;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -27,8 +27,6 @@
       margin-bottom: 1rem;
       border: 4px solid #ff0055;
       box-shadow: 0 0 10px #ff0055;
-      pointer-events: none; /* désactive drag au départ */
-      opacity: 0.7;
     }
     button,
     select {
@@ -40,12 +38,9 @@
       font-size: 1rem;
       cursor: pointer;
     }
-    #difficulty {
-      cursor: not-allowed;
-    }
     #status {
       margin-top: 1rem;
-      min-height: 1.2em;
+      white-space: pre-line; /* pour afficher saut de ligne */
     }
     .fake-help {
       color: #888;
@@ -62,19 +57,17 @@
 </head>
 <body>
   <h1>Krashcore Chess Challenge</h1>
-  <div class="intro">
-    Es-tu prêt à affronter une IA que même Kasparov redouterait ? 😈
-  </div>
+  <div class="intro">Es-tu prêt à affronter une IA made in Thib ? 😈</div>
   <div id="board"></div>
   <div>
-    <select id="difficulty" disabled onchange="fakeDifficultyChange()">
+    <select id="difficulty" onchange="fakeDifficultyChange()">
       <option value="easy">Facile</option>
       <option value="medium">Moyen</option>
       <option value="hard" selected>Difficile</option>
       <option value="impossible">Impossible</option>
     </select>
-    <button id="startBtn">Commencer la partie</button>
-    <button id="resetBtn" disabled>Reset Game</button>
+    <button id="startBtn" onclick="startGame()">Commencer la partie</button>
+    <button onclick="resetGame()">Reset Game</button>
   </div>
   <div class="fake-help" onclick="alert('Conseil stratégique : essaye de ne pas perdre. 😏')">
     Besoin d'aide ?
@@ -84,125 +77,123 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js"></script>
   <script>
-    let game = new Chess();
+    const game = new Chess();
+    let board = null;
     let gameStarted = false;
-    let aiMoveCount = 0;
+    let moveCount = 0;
+    let stockfish = null;
 
-    // Initialise le board désactivé au départ
-    let board = Chessboard("board", {
-      draggable: false,
-      position: "start",
-      onDrop: onDrop,
-      onSnapEnd: () => board.position(game.fen()),
-    });
-
-    const stockfish = new Worker(
-      "https://cdn.jsdelivr.net/gh/niklasf/stockfish.js/stockfish.js"
-    );
-    stockfish.postMessage("uci");
+    function initBoard() {
+      board = Chessboard('board', {
+        draggable: true,
+        position: 'start',
+        onDrop: onDrop,
+        onSnapEnd: () => board.position(game.fen()),
+      });
+    }
 
     function fakeDifficultyChange() {
-      const level = document.getElementById("difficulty").value;
+      const level = document.getElementById('difficulty').value;
       alert(`Difficulté réglée sur : ${level}. (spoiler : ça ne change rien 😎)`);
     }
 
     function onDrop(source, target) {
-      if (!gameStarted) return "snapback";
+      if (!gameStarted) {
+        alert('Clique sur "Commencer la partie" avant de jouer !');
+        return 'snapback';
+      }
+      const move = game.move({ from: source, to: target, promotion: 'q' });
 
-      const move = game.move({ from: source, to: target, promotion: "q" });
+      if (move === null) return 'snapback';
 
-      if (move === null) return "snapback";
-
+      moveCount++;
       updateStatus();
 
       setTimeout(makeAIMove, 250);
     }
 
+    function startGame() {
+      if (gameStarted) {
+        alert('La partie est déjà en cours !');
+        return;
+      }
+      gameStarted = true;
+      moveCount = 0;
+
+      if (!stockfish) {
+        stockfish = new Worker(
+          'https://cdn.jsdelivr.net/gh/niklasf/stockfish.js/stockfish.js'
+        );
+        stockfish.postMessage('uci');
+      }
+
+      game.reset();
+      board.start();
+      updateStatus();
+      document.getElementById('startBtn').disabled = true;
+    }
+
     function makeAIMove() {
       if (game.game_over()) return;
 
-      // IA joue débutant les 4 premiers coups (pouvoir perdre)
-      if (aiMoveCount < 4) {
-        // coups aléatoires pour IA débutant
+      // IA joue comme débutant sur les 5 premiers coups
+      if (moveCount <= 5) {
         const moves = game.moves();
+        // Choisir un coup aléatoire
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
         game.move(randomMove);
         board.position(game.fen());
-        aiMoveCount++;
         updateStatus();
         return;
       }
 
-      // Ensuite IA joue au max depth = 18 (très fort)
-      stockfish.postMessage("position fen " + game.fen());
-      stockfish.postMessage("go depth 18");
-
+      // Après, IA imbattable avec Stockfish
       stockfish.onmessage = function (event) {
         const line = event.data;
-        if (line.startsWith("bestmove")) {
-          const move = line.split(" ")[1];
-          if (move !== "(none)") {
-            game.move({
-              from: move.substr(0, 2),
-              to: move.substr(2, 2),
-              promotion: "q",
-            });
+        if (line.startsWith('bestmove')) {
+          const move = line.split(' ')[1];
+          if (move !== '(none)') {
+            game.move({ from: move.substr(0, 2), to: move.substr(2, 2), promotion: 'q' });
             board.position(game.fen());
             updateStatus();
           }
         }
       };
+
+      stockfish.postMessage('position fen ' + game.fen());
+      stockfish.postMessage('go depth 18');
     }
 
     function updateStatus() {
-      let status = "";
+      let status = '';
 
       if (game.in_checkmate()) {
-        status = "Échec et mat. L'IA a gagné. 😈";
+        status = "Échec et mat. L'IA a gagné. 😈\nT'es nul 😜";
+        gameStarted = false;
+        document.getElementById('startBtn').disabled = false;
       } else if (game.in_draw()) {
         status = "Match nul. Tu t'en sors bien... pour cette fois.";
+        gameStarted = false;
+        document.getElementById('startBtn').disabled = false;
       } else {
-        status = game.turn() === "w" ? "À toi de jouer." : "Tour de l'IA... prépare-toi.";
+        status = game.turn() === 'w' ? 'À toi de jouer.' : "Tour de l'IA... prépare-toi.";
       }
 
-      document.getElementById("status").textContent = status;
+      document.getElementById('status').textContent = status;
     }
 
     function resetGame() {
+      gameStarted = false;
       game.reset();
-      board.position(game.fen());
-      aiMoveCount = 0;
+      if (board) board.start();
       updateStatus();
+      document.getElementById('startBtn').disabled = false;
     }
 
-    // Bouton commencer partie
-    document.getElementById("startBtn").addEventListener("click", () => {
-      gameStarted = true;
-      aiMoveCount = 0;
-
-      // Réactive drag & drop en recréant le board
-      board.destroy();
-      board = Chessboard("board", {
-        draggable: true,
-        position: game.fen(),
-        onDrop: onDrop,
-        onSnapEnd: () => board.position(game.fen()),
-      });
-      document.getElementById("board").style.pointerEvents = "auto";
-      document.getElementById("board").style.opacity = "1";
-
-      document.getElementById("difficulty").disabled = false;
-      document.getElementById("resetBtn").disabled = false;
-      document.getElementById("startBtn").style.display = "none";
-
+    window.onload = () => {
+      initBoard();
       updateStatus();
-    });
-
-    document.getElementById("resetBtn").addEventListener("click", () => {
-      resetGame();
-    });
-
-    updateStatus();
+    };
   </script>
 </body>
 </html>
