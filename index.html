@@ -24,6 +24,8 @@
       margin-bottom: 1rem;
       border: 4px solid #ff0055;
       box-shadow: 0 0 10px #ff0055;
+      pointer-events: none; /* désactive au départ */
+      opacity: 0.6; /* visuel désactivé */
     }
     button, select {
       background-color: #ff0055;
@@ -53,16 +55,21 @@
 <body>
   <h1>Krashcore Chess Challenge</h1>
   <div class="intro">Es-tu prêt à affronter une IA que même Kasparov redouterait ? 😈</div>
+  
+  <button id="startBtn">Commencer la partie</button>
+  
   <div id="board"></div>
+  
   <div>
-    <select id="difficulty" onchange="fakeDifficultyChange()">
+    <select id="difficulty" onchange="fakeDifficultyChange()" disabled>
       <option value="easy">Facile</option>
       <option value="medium">Moyen</option>
       <option value="hard" selected>Difficile</option>
       <option value="impossible">Impossible</option>
     </select>
-    <button onclick="resetGame()">Reset Game</button>
+    <button onclick="resetGame()" disabled id="resetBtn">Reset Game</button>
   </div>
+  
   <div class="fake-help" onclick="alert('Conseil stratégique : essaye de ne pas perdre. 😏')">Besoin d'aide ?</div>
   <div id="status"></div>
 
@@ -71,8 +78,6 @@
 
   <script>
     // Inline Stockfish Worker code as a Blob
-    // Source: https://github.com/niklasf/stockfish.js/blob/master/src/stockfish.js
-    // For demo, loading from CDN inside the Worker blob
     const stockfishBlob = new Blob([`
       importScripts('https://cdn.jsdelivr.net/gh/niklasf/stockfish.js/stockfish.js');
     `], { type: 'application/javascript' });
@@ -81,10 +86,23 @@
 
     const game = new Chess();
     const board = Chessboard('board', {
-      draggable: true,
+      draggable: false, // désactivé au départ
       position: 'start',
       onDrop: onDrop,
       onSnapEnd: () => board.position(game.fen())
+    });
+
+    let gameStarted = false;
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      gameStarted = true;
+      board.draggable = true;
+      board.element.style.pointerEvents = 'auto';
+      board.element.style.opacity = '1';
+      document.getElementById('difficulty').disabled = false;
+      document.getElementById('resetBtn').disabled = false;
+      document.getElementById('startBtn').style.display = 'none';
+      updateStatus();
     });
 
     stockfish.postMessage('uci');
@@ -95,6 +113,8 @@
     }
 
     function onDrop(source, target) {
+      if (!gameStarted) return 'snapback';
+
       const move = game.move({ from: source, to: target, promotion: 'q' });
       if (move === null) return 'snapback';
 
