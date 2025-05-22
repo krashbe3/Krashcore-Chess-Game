@@ -24,8 +24,8 @@
       margin-bottom: 1rem;
       border: 4px solid #ff0055;
       box-shadow: 0 0 10px #ff0055;
-      pointer-events: none; /* désactive au départ */
-      opacity: 0.6; /* visuel désactivé */
+      pointer-events: none;
+      opacity: 0.6;
     }
     button, select {
       background-color: #ff0055;
@@ -86,13 +86,14 @@
 
     const game = new Chess();
     const board = Chessboard('board', {
-      draggable: false, // désactivé au départ
+      draggable: false,
       position: 'start',
       onDrop: onDrop,
       onSnapEnd: () => board.position(game.fen())
     });
 
     let gameStarted = false;
+    let aiMoveCount = 0; // Compte le nombre de coups joués par l'IA
 
     document.getElementById('startBtn').addEventListener('click', () => {
       gameStarted = true;
@@ -102,6 +103,7 @@
       document.getElementById('difficulty').disabled = false;
       document.getElementById('resetBtn').disabled = false;
       document.getElementById('startBtn').style.display = 'none';
+      aiMoveCount = 0;
       updateStatus();
     });
 
@@ -123,21 +125,38 @@
       setTimeout(makeAIMove, 250);
     }
 
-    function makeAIMove() {
-      stockfish.postMessage('position fen ' + game.fen());
-      stockfish.postMessage('go depth 18');
+    // Fonction pour choisir un coup aléatoire parmi les coups légaux (débutant)
+    function randomAIMove() {
+      const moves = game.moves();
+      const move = moves[Math.floor(Math.random() * moves.length)];
+      game.move(move);
+      board.position(game.fen());
+      updateStatus();
+    }
 
-      stockfish.onmessage = function(event) {
-        const line = event.data;
-        if (line.startsWith('bestmove')) {
-          const move = line.split(' ')[1];
-          if (move !== '(none)') {
-            game.move({ from: move.substr(0, 2), to: move.substr(2, 2), promotion: 'q' });
-            board.position(game.fen());
-            updateStatus();
+    function makeAIMove() {
+      aiMoveCount++;
+
+      if (aiMoveCount <= 5) {
+        // Les 5 premiers coups, IA joue aléatoire (faible)
+        randomAIMove();
+      } else {
+        // À partir du 6e coup, IA joue au max avec Stockfish
+        stockfish.postMessage('position fen ' + game.fen());
+        stockfish.postMessage('go depth 18');
+
+        stockfish.onmessage = function(event) {
+          const line = event.data;
+          if (line.startsWith('bestmove')) {
+            const move = line.split(' ')[1];
+            if (move !== '(none)') {
+              game.move({ from: move.substr(0, 2), to: move.substr(2, 2), promotion: 'q' });
+              board.position(game.fen());
+              updateStatus();
+            }
           }
-        }
-      };
+        };
+      }
     }
 
     function updateStatus() {
@@ -157,6 +176,7 @@
     function resetGame() {
       game.reset();
       board.start();
+      aiMoveCount = 0;
       updateStatus();
     }
 
