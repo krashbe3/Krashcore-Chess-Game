@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Krashcore Chess Challenge</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css" />
+  <style>
+    body {
+      background-color: #121212;
+      color: #ffffff;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    h1 {
+      color: #ff0055;
+      text-shadow: 0 0 5px #ff0055;
+    }
+    #board {
+      width: 400px;
+      margin-bottom: 1rem;
+      border: 4px solid #ff0055;
+      box-shadow: 0 0 10px #ff0055;
+    }
+    button, select {
+      background-color: #ff0055;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #status {
+      margin-top: 1rem;
+    }
+    .fake-help {
+      color: #888;
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    .intro {
+      color: #ff0055;
+      font-style: italic;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Krashcore Chess Challenge</h1>
+  <div class="intro">Es-tu prêt à affronter une IA que même Kasparov redouterait ? 😈</div>
+  <div id="board"></div>
+  <div>
+    <select id="difficulty" onchange="fakeDifficultyChange()">
+      <option value="easy">Facile</option>
+      <option value="medium">Moyen</option>
+      <option value="hard" selected>Difficile</option>
+      <option value="impossible">Impossible</option>
+    </select>
+    <button onclick="resetGame()">Reset Game</button>
+  </div>
+  <div class="fake-help" onclick="alert('Conseil stratégique : essaye de ne pas perdre. 😏')">Besoin d'aide ?</div>
+  <div id="status"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js"></script>
+  <script>
+    const game = new Chess();
+    const board = Chessboard('board', {
+      draggable: true,
+      position: 'start',
+      onDrop: onDrop,
+      onSnapEnd: () => board.position(game.fen())
+    });
+
+    const stockfish = new Worker('https://cdn.jsdelivr.net/gh/niklasf/stockfish.js/stockfish.js');
+
+    stockfish.postMessage('uci');
+
+    function fakeDifficultyChange() {
+      const level = document.getElementById('difficulty').value;
+      alert(`Difficulté réglée sur : ${level}. (spoiler : ça ne change rien 😎)`);
+    }
+
+    function onDrop(source, target) {
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+
+      if (move === null) return 'snapback';
+
+      updateStatus();
+
+      setTimeout(makeAIMove, 250);
+    }
+
+    function makeAIMove() {
+      stockfish.postMessage('position fen ' + game.fen());
+      stockfish.postMessage('go depth 18');
+
+      stockfish.onmessage = function (event) {
+        const line = event.data;
+        if (line.startsWith('bestmove')) {
+          const move = line.split(' ')[1];
+          if (move !== '(none)') {
+            game.move({ from: move.substr(0, 2), to: move.substr(2, 2), promotion: 'q' });
+            board.position(game.fen());
+            updateStatus();
+          }
+        }
+      };
+    }
+
+    function updateStatus() {
+      let status = '';
+
+      if (game.in_checkmate()) {
+        status = 'Échec et mat. L\'IA a gagné. 😈';
+      } else if (game.in_draw()) {
+        status = 'Match nul. Tu t\'en sors bien... pour cette fois.';
+      } else {
+        status = game.turn() === 'w' ? 'À toi de jouer.' : 'Tour de l\'IA... prépare-toi.';
+      }
+
+      document.getElementById('status').textContent = status;
+    }
+
+    function resetGame() {
+      game.reset();
+      board.start();
+      updateStatus();
+    }
+
+    updateStatus();
+  </script>
+</body>
+</html>
