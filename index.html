@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Krashcore Chess Challenge</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
@@ -68,7 +68,17 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js"></script>
+
   <script>
+    // Inline Stockfish Worker code as a Blob
+    // Source: https://github.com/niklasf/stockfish.js/blob/master/src/stockfish.js
+    // For demo, loading from CDN inside the Worker blob
+    const stockfishBlob = new Blob([`
+      importScripts('https://cdn.jsdelivr.net/gh/niklasf/stockfish.js/stockfish.js');
+    `], { type: 'application/javascript' });
+
+    const stockfish = new Worker(URL.createObjectURL(stockfishBlob));
+
     const game = new Chess();
     const board = Chessboard('board', {
       draggable: true,
@@ -76,8 +86,6 @@
       onDrop: onDrop,
       onSnapEnd: () => board.position(game.fen())
     });
-
-    const stockfish = new Worker('https://cdn.jsdelivr.net/gh/niklasf/stockfish.js/stockfish.js');
 
     stockfish.postMessage('uci');
 
@@ -88,7 +96,6 @@
 
     function onDrop(source, target) {
       const move = game.move({ from: source, to: target, promotion: 'q' });
-
       if (move === null) return 'snapback';
 
       updateStatus();
@@ -100,7 +107,7 @@
       stockfish.postMessage('position fen ' + game.fen());
       stockfish.postMessage('go depth 18');
 
-      stockfish.onmessage = function (event) {
+      stockfish.onmessage = function(event) {
         const line = event.data;
         if (line.startsWith('bestmove')) {
           const move = line.split(' ')[1];
